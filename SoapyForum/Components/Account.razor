@@ -1,5 +1,8 @@
 ﻿<h3>Account</h3>
 
 @code {
-    
+    [Parameter] public int Id { get; set; }
+    [Parameter] public string Username { get; set; }
+    [Parameter] public string Password { get; set; }
+    [Parameter] public DateTime UserCreatedAt { get; set; } = DateTime.Now;
 }

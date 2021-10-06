@@ -1,5 +1,30 @@
-﻿<h3>Message</h3>
+﻿@using SoapyForum.Models
+<h3>@UserInfo.Username : @Text | @MessageTime</h3>
+
+
 
 @code {
+    
+    [Inject] public AppDbContext AppDbContext { get; set; }
 
+    public Models.Account UserInfo { get; set; }
+    
+    public Models.Message MessageInfo { get; set; }
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        LoadData();
+    }
+
+    private void LoadData()
+    {
+        UserInfo = AppDbContext.Accounts.First(a => a.Id == UserId);
+        MessageInfo = AppDbContext.Messages.First(a => a.Id == Id);
+    }
+    
+    [Parameter] public int Id { get; set; }
+    [Parameter] public string Text { get; set; }
+    [Parameter] public int UserId { get; set; }
+    [Parameter] public DateTime MessageTime { get; set; } 
 }
