@@ -1,4 +1,5 @@
 ﻿using System;
+using System.ComponentModel.DataAnnotations;
 
 namespace SoapyForum.Models
 {
@@ -6,7 +7,7 @@ namespace SoapyForum.Models
     {
         public int Id { get; set; }
         public string Username { get; set; }
-        public string Password { get; set; }
+        [MaxLength(257)] public string Password { get; set; }
         public DateTime UserCreatedAt { get; set; } = DateTime.Now;
     }
 }

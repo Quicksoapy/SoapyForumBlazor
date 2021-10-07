@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Blazored.SessionStorage;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Hosting;
@@ -30,14 +31,16 @@ namespace SoapyForum
         {
             services.AddRazorPages();
             services.AddServerSideBlazor();
+            services.AddBlazoredSessionStorage();
             services.AddSingleton<WeatherForecastService>();
             services.AddDbContext<AppDbContext>(options =>
-                options.UseNpgsql(Configuration.GetConnectionString("AppDbContext")));
+                options.UseNpgsql(Configuration.GetConnectionString("AppDbContext")), ServiceLifetime.Transient,ServiceLifetime.Transient);
         }
         
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
         public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
         {
+            app.ApplicationServices.GetRequiredService<AppDbContext>().Database.Migrate();
             if (env.IsDevelopment())
             {
                 app.UseDeveloperExceptionPage();

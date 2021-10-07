@@ -1,69 +1,128 @@
 @page "/"
 @using SoapyForum.Models
+@using Message = SoapyForum.Components.Message
+@using System.Security.Cryptography
+@using System.Text
+@if (SessionAccount == 0)
+{
+    <h1>Welcome to SoapyForum, made in Blazor! You can make an account here. (Yes the passwords get hashed with SHA256)</h1>
+}
+else
+{
+    <h1>Welcome @AppDbContext.Accounts.First(x => x.Id == SessionAccount).Username!</h1>
+}
 
-<h1>Welcome to SoapyForum, made in Blazor!</h1>
-
-<EditForm Model="@this" OnValidSubmit="OnValidSubmitAccountCreation"> 
+<EditForm Model="@this" OnValidSubmit="OnValidSubmitAccountCreation">
+    <label>Create account:</label>
     <label>Username:</label>
-    <InputText @bind-Value="NewUsername" /> 
+    <InputText @bind-Value="NewUsername"/>
     <label>Password:</label>
     <InputText @bind-Value="NewPassword"></InputText>
 
     <button type="submit">Submit</button>
 </EditForm>
 
-<EditForm Model="@this" OnValidSubmit="OnValidSubmitMessageCreation"> 
-    <label>Text:</label>
-    <InputText @bind-Value="NewText" /> 
-   
+<EditForm Model="@this" OnValidSubmit="OnValidSubmitAccountLogin">
+    <label>Log in:</label>
+    <label>Username:</label>
+    <InputText @bind-Value="LoginUsername"/>
+    <label>Password:</label>
+    <InputText @bind-Value="LoginPassword"></InputText>
+
     <button type="submit">Submit</button>
 </EditForm>
 
-@foreach (var message in Messages)
+@if (SessionAccount != 0)
 {
-    <Message />
+    <EditForm Model="@this" OnValidSubmit="OnValidSubmitMessageCreation"> 
+        <label>Text:</label>
+        <InputText @bind-Value="NewText" /> 
+       
+        <button type="submit">Submit</button>
+    </EditForm>
 }
 
+
+@foreach (var message in Messages)
+{
+    <Message UserId="@message.UserId" Id="@message.Id" Text="@message.Text" MessageTime="@message.MessageTime"></Message>
+}
+
+@inject Blazored.SessionStorage.ISessionStorageService _sessionStorageService   
 @code 
 {
     [Inject] public AppDbContext AppDbContext { get; set; }
-
-    public List<Message> Messages { get; set; } = new();
     
-    public List<Account> Accounts { get; set; } = new();
-    
-    protected override void OnInitialized()
-    {
-        base.OnInitialized();
-        LoadData();
-    }
-    
+    public List<Models.Message> Messages { get; set; } = new();
+    public List<Models.Account> Accounts { get; set; } = new();
+    public string NewUsername { get; set; }
+    public string NewPassword { get; set; }
+    public string LoginUsername { get; set; }
+    public string LoginPassword { get; set; }
+    public int SessionAccount { get; set; }
+        
     private void LoadData()
     {
         Messages = AppDbContext.Messages.OrderBy(t => t.Id).ToList();
         Accounts = AppDbContext.Accounts.OrderBy(t => t.Id).ToList();
     }
 
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        LoadData();
+    }
+
     private void OnValidSubmitAccountCreation()
     {
-        AppDbContext.Accounts.Add(new Account()
+        //CHANGE THIS ILLEGAL CODE LATER
+        try
+        {
+            var username = AppDbContext.Accounts.First(x => x.Username == NewUsername);
+            if (username.Username == NewUsername)
+            {
+                return;
+            }
+        }
+        catch (Exception)
+        {
+            return;
+        }
+        
+        AppDbContext.Accounts.Add(new Models.Account()
         {
             Username = NewUsername,
-            Password = NewPassword,
+            Password = ComputeSha256Hash(NewPassword),
             UserCreatedAt = DateTime.Now
         });
         AppDbContext.SaveChanges();
         InvokeAsync(StateHasChanged);
     }
 
-    public string NewUsername { get; set; }
-    public string NewPassword { get; set; }
+    private void OnValidSubmitAccountLogin()
+    {
+        var account = AppDbContext.Accounts.First(x => x.Username == LoginUsername);
+        if (account == null)
+        {
+            return;
+        }
+        if (account.Password != ComputeSha256Hash(LoginPassword))
+        {
+            return;
+        }
 
+        _sessionStorageService.SetItemAsync("loginAccount", account.Id);
+    }
+    
     private void OnValidSubmitMessageCreation()
     {
-        AppDbContext.Messages.Add(new Message()
+        if (SessionAccount == 0)
         {
-            UserId = 2,
+            return;
+        }
+        AppDbContext.Messages.Add(new Models.Message()
+        {
+            UserId = SessionAccount,
             Text = NewText,
             MessageTime = DateTime.Now
         });
@@ -71,6 +130,28 @@
         InvokeAsync(StateHasChanged);
     }
     
+    public async Task AccountCheck()
+    {
+        SessionAccount = await _sessionStorageService.GetItemAsync<int>("loginAccount");
+    }
+    
     public string NewText { get; set; }
     
+    static string ComputeSha256Hash(string rawData)  
+    {  
+    // Create a SHA256   
+        using (SHA256 sha256Hash = SHA256.Create())  
+        {  
+    // ComputeHash - returns byte array  
+            byte[] bytes = sha256Hash.ComputeHash(Encoding.UTF8.GetBytes(rawData));  
+  
+    // Convert byte array to a string   
+            StringBuilder builder = new StringBuilder();  
+            for (int i = 0; i < bytes.Length; i++)  
+            {  
+                builder.Append(bytes[i].ToString("x2"));  
+            }  
+            return builder.ToString();  
+        }  
+    }
 }
