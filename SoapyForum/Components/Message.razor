@@ -1,6 +1,8 @@
 ﻿@using SoapyForum.Models
-<h3>@UserInfo.Username: @Text | @MessageTime</h3>
-
+@if (AppDbContext.Accounts.Any())
+{
+    <h3>@UserInfo.Username: @Text | @MessageTime</h3>
+}
 
 
 @code {
@@ -19,8 +21,14 @@
 
     private void LoadData()
     {
-        UserInfo = AppDbContext.Accounts.First(a => a.Id == UserId);
-        MessageInfo = AppDbContext.Messages.First(a => a.Id == Id);
+        if (AppDbContext.Accounts.Any())
+        {
+            UserInfo = AppDbContext.Accounts.First(a => a.Id == UserId);
+        }
+        if (AppDbContext.Messages.Any())
+        {
+           MessageInfo = AppDbContext.Messages.First(a => a.Id == Id); 
+        }
     }
     
     [Parameter] public int Id { get; set; }

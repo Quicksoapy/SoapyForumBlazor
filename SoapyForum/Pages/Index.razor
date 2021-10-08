@@ -3,13 +3,13 @@
 @using Message = SoapyForum.Components.Message
 @using System.Security.Cryptography
 @using System.Text
-@if (SessionAccount == 0)
+@if (SessionAccountId == 0)
 {
     <h1>Welcome to SoapyForum, made in Blazor! You can make an account here. (Yes the passwords get hashed with SHA256)</h1>
 }
 else
 {
-    <h1>Welcome @AppDbContext.Accounts.First(x => x.Id == SessionAccount).Username!</h1>
+    <h1>Welcome @AppDbContext.Accounts.First(x => x.Id == SessionAccountId).Username!</h1>
 }
 
 <EditForm Model="@this" OnValidSubmit="OnValidSubmitAccountCreation">
@@ -32,7 +32,7 @@ else
     <button type="submit">Submit</button>
 </EditForm>
 
-@if (SessionAccount != 0)
+@if (SessionAccountId != 0)
 {
     <EditForm Model="@this" OnValidSubmit="OnValidSubmitMessageCreation"> 
         <label>Text:</label>
@@ -59,7 +59,7 @@ else
     public string NewPassword { get; set; }
     public string LoginUsername { get; set; }
     public string LoginPassword { get; set; }
-    public int SessionAccount { get; set; }
+    public int SessionAccountId { get; set; }
         
     private void LoadData()
     {
@@ -75,16 +75,8 @@ else
 
     private void OnValidSubmitAccountCreation()
     {
-        //CHANGE THIS ILLEGAL CODE LATER
-        try
-        {
-            var username = AppDbContext.Accounts.First(x => x.Username == NewUsername);
-            if (username.Username == NewUsername)
-            {
-                return;
-            }
-        }
-        catch (Exception)
+        var doesUsernameExist = AppDbContext.Accounts.Any(x => x.Username == NewUsername);
+        if (doesUsernameExist)
         {
             return;
         }
@@ -101,12 +93,14 @@ else
 
     private void OnValidSubmitAccountLogin()
     {
-        var account = AppDbContext.Accounts.First(x => x.Username == LoginUsername);
-        if (account == null)
+        var doesUsernameExist = AppDbContext.Accounts.Any(x => x.Username == LoginUsername);
+        if (doesUsernameExist == false)
         {
             return;
         }
-        if (account.Password != ComputeSha256Hash(LoginPassword))
+        var hashedPassword = ComputeSha256Hash(LoginPassword);
+        var account = AppDbContext.Accounts.First(x => x.Password == hashedPassword);
+        if (account.Password != hashedPassword)
         {
             return;
         }
@@ -116,13 +110,9 @@ else
     
     private void OnValidSubmitMessageCreation()
     {
-        if (SessionAccount == 0)
-        {
-            return;
-        }
         AppDbContext.Messages.Add(new Models.Message()
         {
-            UserId = SessionAccount,
+            UserId = AccountCheck().Result,
             Text = NewText,
             MessageTime = DateTime.Now
         });
@@ -130,9 +120,10 @@ else
         InvokeAsync(StateHasChanged);
     }
     
-    public async Task AccountCheck()
+    public async Task<int> AccountCheck()
     {
-        SessionAccount = await _sessionStorageService.GetItemAsync<int>("loginAccount");
+        SessionAccountId = await _sessionStorageService.GetItemAsync<int>("loginAccount");
+        return SessionAccountId;
     }
     
     public string NewText { get; set; }
