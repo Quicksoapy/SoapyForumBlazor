@@ -3,34 +3,39 @@
 @using Message = SoapyForum.Components.Message
 @using System.Security.Cryptography
 @using System.Text
+@using Account = SoapyForum.Models.Account
+@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
+@inject ProtectedLocalStorage _browserStorage
+
+
 @if (SessionAccountId == 0)
 {
     <h1>Welcome to SoapyForum, made in Blazor! You can make an account here. (Yes the passwords get hashed with SHA256)</h1>
+    <EditForm Model="@this" OnValidSubmit="OnValidSubmitAccountCreation">
+        <label>Create account:</label>
+        <label>Username:</label>
+        <InputText @bind-Value="NewUsername"/>
+        <label>Password:</label>
+        <InputText @bind-Value="NewPassword"></InputText>
+
+        <button type="submit">Submit</button>
+    </EditForm>
+
+    <EditForm Model="@this" OnValidSubmit="OnValidSubmitAccountLogin">
+        <label>Log in:</label>
+        <label>Username:</label>
+        <InputText @bind-Value="LoginUsername"/>
+        <label>Password:</label>
+        <InputText @bind-Value="LoginPassword"></InputText>
+
+        <button type="submit">Submit</button>
+    </EditForm>
 }
 else
 {
     <h1>Welcome @AppDbContext.Accounts.First(x => x.Id == SessionAccountId).Username!</h1>
+    <button @onclick="LogOut">Log out</button>
 }
-
-<EditForm Model="@this" OnValidSubmit="OnValidSubmitAccountCreation">
-    <label>Create account:</label>
-    <label>Username:</label>
-    <InputText @bind-Value="NewUsername"/>
-    <label>Password:</label>
-    <InputText @bind-Value="NewPassword"></InputText>
-
-    <button type="submit">Submit</button>
-</EditForm>
-
-<EditForm Model="@this" OnValidSubmit="OnValidSubmitAccountLogin">
-    <label>Log in:</label>
-    <label>Username:</label>
-    <InputText @bind-Value="LoginUsername"/>
-    <label>Password:</label>
-    <InputText @bind-Value="LoginPassword"></InputText>
-
-    <button type="submit">Submit</button>
-</EditForm>
 
 @if (SessionAccountId != 0)
 {
@@ -42,17 +47,16 @@ else
     </EditForm>
 }
 
-
 @foreach (var message in Messages)
 {
     <Message UserId="@message.UserId" Id="@message.Id" Text="@message.Text" MessageTime="@message.MessageTime"></Message>
 }
 
-@inject Blazored.SessionStorage.ISessionStorageService _sessionStorageService   
 @code 
 {
-    [Inject] public AppDbContext AppDbContext { get; set; }
-    
+    [Inject]
+    public AppDbContext AppDbContext { get; set; }
+
     public List<Models.Message> Messages { get; set; } = new();
     public List<Models.Account> Accounts { get; set; } = new();
     public string NewUsername { get; set; }
@@ -60,7 +64,8 @@ else
     public string LoginUsername { get; set; }
     public string LoginPassword { get; set; }
     public int SessionAccountId { get; set; }
-        
+    public string NewText { get; set; }
+    
     private void LoadData()
     {
         Messages = AppDbContext.Messages.OrderBy(t => t.Id).ToList();
@@ -80,69 +85,79 @@ else
         {
             return;
         }
-        
-        AppDbContext.Accounts.Add(new Models.Account()
+
+        var account = new Models.Account()
         {
             Username = NewUsername,
             Password = ComputeSha256Hash(NewPassword),
             UserCreatedAt = DateTime.Now
-        });
+        };
+        AppDbContext.Accounts.Add(account);
         AppDbContext.SaveChanges();
+        _browserStorage.SetAsync("loginAccount", account.Id);
+        SessionAccountId = account.Id;
         InvokeAsync(StateHasChanged);
     }
 
     private void OnValidSubmitAccountLogin()
     {
-        var doesUsernameExist = AppDbContext.Accounts.Any(x => x.Username == LoginUsername);
-        if (doesUsernameExist == false)
-        {
-            return;
-        }
         var hashedPassword = ComputeSha256Hash(LoginPassword);
-        var account = AppDbContext.Accounts.First(x => x.Password == hashedPassword);
-        if (account.Password != hashedPassword)
+        var account = AppDbContext.Accounts.FirstOrDefault(x => x.Password == hashedPassword && x.Username == LoginUsername);
+        if (account == null)
         {
             return;
         }
-
-        _sessionStorageService.SetItemAsync("loginAccount", account.Id);
+        _browserStorage.SetAsync("loginAccount", account.Id);
+        SessionAccountId = account.Id;
+        InvokeAsync(StateHasChanged);
     }
-    
+
     private void OnValidSubmitMessageCreation()
     {
         AppDbContext.Messages.Add(new Models.Message()
         {
-            UserId = AccountCheck().Result,
+            UserId = SessionAccountId,
             Text = NewText,
             MessageTime = DateTime.Now
         });
         AppDbContext.SaveChanges();
+        LoadData();
         InvokeAsync(StateHasChanged);
     }
-    
-    public async Task<int> AccountCheck()
+
+    public async Task AccountCheck()
     {
-        SessionAccountId = await _sessionStorageService.GetItemAsync<int>("loginAccount");
-        return SessionAccountId;
+        SessionAccountId = (await _browserStorage.GetAsync<int>("loginAccount")).Value;
     }
-    
-    public string NewText { get; set; }
-    
-    static string ComputeSha256Hash(string rawData)  
-    {  
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        await AccountCheck();
+    }
+
+    static string ComputeSha256Hash(string rawData)
+    {
     // Create a SHA256   
-        using (SHA256 sha256Hash = SHA256.Create())  
-        {  
+        using (SHA256 sha256Hash = SHA256.Create())
+        {
     // ComputeHash - returns byte array  
-            byte[] bytes = sha256Hash.ComputeHash(Encoding.UTF8.GetBytes(rawData));  
-  
+            byte[] bytes = sha256Hash.ComputeHash(Encoding.UTF8.GetBytes(rawData));
+
     // Convert byte array to a string   
-            StringBuilder builder = new StringBuilder();  
-            for (int i = 0; i < bytes.Length; i++)  
-            {  
-                builder.Append(bytes[i].ToString("x2"));  
-            }  
-            return builder.ToString();  
-        }  
+            StringBuilder builder = new StringBuilder();
+            for (int i = 0; i < bytes.Length; i++)
+            {
+                builder.Append(bytes[i].ToString("x2"));
+            }
+            return builder.ToString();
+        }
+    }
+
+    private async Task LogOut()
+    {
+        await _browserStorage.SetAsync("loginAccount", 0);
+        SessionAccountId = 0;
+        await InvokeAsync(StateHasChanged);
     }
 }
